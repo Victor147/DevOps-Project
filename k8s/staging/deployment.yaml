@@ -1,0 +1,108 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: staging
+  labels:
+    app: user-service
+    environment: staging
+    version: v1
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+        environment: staging
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      serviceAccountName: user-service-sa
+      containers:
+        - name: user-service
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "staging"
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  key: DATABASE_URL
+                  name: user-service-config
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: database-username
+                  name: user-service-secret
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: database-password
+                  name: user-service-secret
+            - name: JAVA_OPTS
+              value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              port: 8080
+              path: /actuator/health/liveness
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              port: 8080
+              path: /actuator/health/readiness
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              port: 8080
+              path: /actuator/health
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 1000

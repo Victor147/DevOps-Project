@@ -1,0 +1,10 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  namespace: staging
+data:
+  APPLICATION_NAME: "user-service"
+  ENVIRONMENT: "staging"
+  LOG_LEVEL: "DEBUG"
+  DATABASE_URL: "jdbc:postgresql://postgres-service:5432/userdb"

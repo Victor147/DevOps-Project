@@ -1,0 +1,30 @@
+﻿apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: user-service-ingress
+  namespace: staging
+  labels:
+    app: user-service
+    environment: staging
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert.manager.io/cluster-issues: "letsencrypt-staging"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+      - staging.user-service.example.com
+      secretName: user-service-tls-staging
+  rules:
+    - host: staging.user-service.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80

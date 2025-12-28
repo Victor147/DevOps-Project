@@ -1,0 +1,31 @@
+﻿apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: user-service-ingress
+  namespace: production
+  labels:
+    app: user-service
+    environment: production
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "200"
+    nginx.ingress.kubernetes.io/enable-cort: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+      - api.user-service.example.com
+      secretName: user-service-tls-prodution
+  rules:
+    - host: api.user-service.example.com
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: user-service
+              port:
+                number: 80

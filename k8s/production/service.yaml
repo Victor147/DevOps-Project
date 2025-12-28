@@ -1,0 +1,18 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: production
+  labels:
+    app: user-service
+    environment: production
+spec:
+  type: ClusterIP
+  selector:
+    app: user-service
+  ports:
+    - port: 80
+      name: http
+      targetPort: 8080
+      protocol: TCP
+  sessionAffinity: None

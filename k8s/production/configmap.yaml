@@ -1,0 +1,10 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  namespace: production
+data:
+  APPLICATION_NAME: "user-service"
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  DATABASE_URL: "jdbc:postgresql://postgres-service:5432/userdb"

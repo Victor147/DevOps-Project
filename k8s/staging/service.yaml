@@ -1,0 +1,18 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: staging
+  labels:
+    app: user-service
+    environment: staging
+spec:
+  type: ClusterIP
+  selector:
+    app: user-service
+  ports:
+    - port: 80
+      name: http
+      targetPort: 8080
+      protocol: TCP
+  sessionAffinity: None

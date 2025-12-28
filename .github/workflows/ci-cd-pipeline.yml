@@ -1,0 +1,361 @@
+﻿name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**', 'bigfix/**', 'hotfix/**' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '25'
+  MAVEN_OPTS: '-Xmx3072m'
+  DOCKER_REGISTRY: docker.io
+  IMAGE_NAME: user-service
+  SONAR_PROJECT_KEY: devops-user-service
+
+jobs:
+  # code quality
+  code-quality:
+    name: Code Quality & SAST
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{env.JAVA_VERSION}}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Cache Maven Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{hashFiles('**/pom.xml')}}
+          restore-keys: |
+            ${{runner.os}}-maven-
+
+      - name: Compile code
+        run: mvn clean compile
+
+      - name: Run Checkstyle (Style Check)
+        run: mvn checkstyle:check
+        continue-on-error: false
+
+      - name: Run PMD (Static Analysis)
+        run: mvn pmd:check
+        continue-on-error: false
+
+      - name: Run SpotBugs (SAST - Bug Detection)
+        run: mvn spotbugs:check
+        continue-on-error: false
+
+      - name: Generate SpotBugs Report
+        if: always()
+        run: |
+          mvn spotbugs:spotbugs
+          mkdir -p reports
+          cp target/spotbugsXml.xml reports/ || true
+
+      - name: Run SonarCloud Analysis (Comprehensive SAST)
+        env:
+          SONAR_TOKEN: ${{secrets.SONAR_TOKEN}}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.projectKey=${{env.SONAR_PROJECT_KEY}} \
+            -Dsonar.organization=${{secrets.SONAR_ORGANIZATION}} \
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.token=${{secrets.SONAR_TOKEN}}
+        continue-on-error: true
+
+      - name: Upload SAST Reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: sast-reports
+          path: |
+            target/checkstyle-result.xml
+            target/pmd.xml
+            reports/spotbugsXml.xml
+            target/site/
+
+  # unit test and coverage
+  test:
+    name: Unit Test & Coverage
+    runs-on: ubuntu-latest
+    needs: code-quality
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{env.JAVA_VERSION}}
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: Run Unit Tests
+        run: mvn test
+
+      - name: Generate Code Coverage Report
+        run: mvn jacoco:report
+
+      - name: Check Code Coverage Threshold
+        run: |
+          mvm jacoco:report || echo "Warning: Code Coverage is below threshold"
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: target/surefire-reports/
+
+      - name: Upload Code Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: target/site/jacoco/
+
+      - name: Publish Test Report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: JUnit Test Results
+          path: target/surefire-reports/*.xml
+          reporter: java-junit
+        continue-on-error: true
+
+  # dependency scan
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    needs: code-quality
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name : Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{env.JAVA_VERSION}}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run OWASP Dependency Check
+        run: mvn dependency-check:check -DfailBuildOnCVSS=7
+        continue-on-error: true
+
+      - name: Upload Dependency Scan Report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          path: target/dependency-check-report.html
+          name: dependency-check-report
+
+  # database migration
+  database-migration:
+    name: Test Database Migrations
+    runs-on: ubuntu-latest
+    needs: test
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: testdb
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready4
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{env.JAVA_VERSION}}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Test Flyway Migrations
+        run: mvn flyway:info \ 
+                -Dflyway.url=jdbc:postgresql://localhost:5432/testdb \
+                -Dflyway.user=testuser \
+                -Dflyway.password=testpass
+
+      - name: Run Flyway Migrations
+        run: mvn flyway:migrate \
+                -Dflyway.url=jdbc:postgresql://localhost:5432/testdb \
+                -Dflyway.user=testuser \
+                -Dflyway.password=testpass
+
+      - name: Verify Migrations
+        run: mvn flyway:info \
+                -Dflyway.url=jdbc:postgresql://localhost:5432/testdb \
+                -Dflyway.user=testuser \
+                -Dflyway.password=testpass
+
+      - name: Test Migration Rollback (Dry Run)
+        run: mvn flyway:validate \
+                -Dflyway.url=jdbc:postgresql://localhost:5432/testdb \
+                -Dflyway.user=testuser \
+                -Dflyway.password=testpass
+
+  # build docker image
+  build-docker:
+    name: Build & Scan Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, database-migration]
+    if: github.event_name == 'push' && github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Registry
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{env.DOCKER_REGISTRY}}
+          username: ${{secrets.DOCKER_USERNAME}}
+          password: ${{secrets.DOCKER_PASSWORD}}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{env.DOCKER_REGISTRY}}/${{secrets.DOCKER_USERNAME}}/${{env.IMAGE_NAME}}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable=${{is_default_branch}}
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{steps.meta.outputs.tags}}
+          labels: ${{steps.meta.outputs.labels}}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{env.DOCKER_REGISTRY}}/${{secrets.DOCKER_USERNAME}}/${{env.IMAGE_NAME}}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      - name: Upload Trivy Scan Results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Run Trivy for HTML Report
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{env.DOCKER_REGISTRY}}/${{secrets.DOCKER_USERNAME}}/${{env.IMAGE_NAME}}
+          format: 'template'
+          template: '@/contrib/sarif.tpl'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Upload Trivy Scan Report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-scan-report
+          path: trivy-results.html
+
+      - name: Push Docker Image
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{steps.meta.outputs.tags}}
+          labels: ${{steps.meta.outputs.labels}}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # deploy to kubernetes
+  deploy-kubernetes:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-docker
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    environment:
+      name: ${{github.ref=='refs/heads/main' && 'production' || 'staging'}}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure Kubernetes Context
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{secrets.KUBE_CONFIG}}" | base64 -d > $HOME/.kube/config
+        continue-on-error: true
+
+      - name: Update Kubernetes Manifests
+        run: |
+          ENVIRONMENT=${{github.ref=='refs/heads/main' && 'production' || 'staging'}}
+          IMAGE_TAG=${{github.sha}}
+          
+          sed -i "s|IMAGE_PLACEHOLDER|${{env.DOCKER_REGISTRY}}/${{secrets.DOCKER_USERNAME}}/${{env.IMAGE_NAME}}:sha-${IMAGE_TAG:0:7}|g" k8s/$ENVIRONMENT/deployment.yaml
+
+      - name: Deploy to Kubernetes
+        run: |
+          ENVIRONMENT=${{github.ref=='refs/heads/main' && 'production' || 'staging'}}
+          kubectl get pods -n $ENVIRONMENT
+          kubectl get services -n $ENVIRONMENT
+        continue-on-error: true
+
+  # notification
+  notify:
+    name: Notifiation
+    runs-on: ubuntu-latest
+    needs: [code-quality, test, dependency-scan, database-migration, build-docker, deploy-kubernetes]
+    if: always()
+
+    steps:
+      - name: Pipeline Status Summary
+        run: |
+          echo "## Pipeline Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{github.ref_name}}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{github.sha}}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{job.status}}" >> $GITHUB_STEP_SUMMARY
