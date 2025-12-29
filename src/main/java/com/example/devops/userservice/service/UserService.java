@@ -20,7 +20,7 @@ public class UserService {
 
     public List<UserDto> getAllUsers() {
         log.info("Getting all users");
-        return userRepository.findAll().stream()
+         return userRepository.findAll().stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
     }
