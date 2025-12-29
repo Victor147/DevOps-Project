@@ -37,7 +37,7 @@
         <module name="AvoidStarImport"/>
         <module name="IllegalImport"/>
         <module name="RedundantImport"/>
-        <module name="UnusedImport"/>
+        <module name="UnusedImports"/>
 
         <module name="MethodLength">
             <property name="max" value="150"/>
@@ -82,4 +82,3 @@
         <module name="UpperEll"/>
     </module>
 </module>
-
