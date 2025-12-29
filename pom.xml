@@ -166,11 +166,19 @@
                 <version>3.21.2</version>
                 <configuration>
                     <rulesets>
-                        <ruleset>pmd-ruleset.xml</ruleset>
+                        <ruleset>${project.basedir}/pmd-ruleset.xml</ruleset>
                     </rulesets>
                     <printFailingErrors>true</printFailingErrors>
                     <failOnViolation>false</failOnViolation>
                 </configuration>
+                <executions>
+                    <execution>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>pmd</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>
