@@ -2,8 +2,9 @@
 
 WORKDIR /app
 
-COPY pom.xml
-RUN mvn dependency:go-offline -B
+COPY pom.xml .
+
+RUN mvn dependency:resolve dependency:resolve-plugins -B
 
 COPY src ./src
 COPY checkstyle.xml .
