@@ -8,7 +8,7 @@ metadata:
     environment: production
     version: v1
 spec:
-  replicas: 3
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -28,42 +28,44 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
     spec:
+      imagePullSecrets:
+        - name: my-registry-key
       serviceAccountName: user-service-sa
       containers:
         - name: user-service
           image: IMAGE_PLACEHOLDER
           imagePullPolicy: Always
           ports:
-          - containerPort: 8080
-            name: http
-            protocol: TCP
+            - containerPort: 8080
+              name: http
+              protocol: TCP
           env:
-          - name: SPRING_PROFILES_ACTIVE
-            value: "production"
-          - name: DATABASE_URL
-            valueFrom:
-              configMapKeyRef:
-                key: DATABASE_URL
-                name: user-service-config
-          - name: DATABASE_USERNAME
-            valueFrom:
-              configMapKeyRef:
-                key: database-username
-                name: user-service-secret
-          - name: DATABASE_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: database-password
-                name: user-service-secret
-          - name: JAVA_OPTS
-            value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+            - name: SPRING_PROFILES_ACTIVE
+              value: "production"
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  key: DATABASE_URL
+                  name: user-service-config
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: database-username
+                  name: user-service-secret
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: database-password
+                  name: user-service-secret
+            - name: JAVA_OPTS
+              value: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
           resources:
             requests:
-              memory: "1Gi"
-              cpu: "500m"
+              memory: "256Mi"
+              cpu: "100m"
             limits:
-              memory: "2Gi"
-              cpu: "1000m"
+              memory: "512Mi"
+              cpu: "500m"
           livenessProbe:
             httpGet:
               port: 8080
@@ -106,15 +108,3 @@ spec:
       terminationGracePeriodSeconds: 30
       securityContext:
         fsGroup: 1000
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                  - key: app
-                    operator: In
-                    values:
-                      - user-service
-              topologyKey: kubernetes.io/hostname
