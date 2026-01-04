@@ -23,17 +23,11 @@ spec:
         app: user-service
         environment: production
         version: v1
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/actuator/prometheus"
     spec:
-      imagePullSecrets:
-        - name: my-registry-key
       serviceAccountName: user-service-sa
       containers:
         - name: user-service
-          image: IMAGE_PLACEHOLDER
+          image: victor147/user-service:main
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -67,29 +61,10 @@ spec:
               memory: "512Mi"
               cpu: "500m"
           livenessProbe:
-            httpGet:
+            tcpSocket:
               port: 8080
-              path: /actuator/health/liveness
-            initialDelaySeconds: 60
+            initialDelaySeconds: 200
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              port: 8080
-              path: /actuator/health/readiness
-            initialDelaySeconds: 30
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-          startupProbe:
-            httpGet:
-              port: 8080
-              path: /actuator/health
-            initialDelaySeconds: 0
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 30
           volumeMounts:
             - mountPath: /tmp
               name: tmp

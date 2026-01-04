@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: user-service
+
+  datasource:
+    url: jdbc:postgresql://postgres-service:5432/userdb

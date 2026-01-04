@@ -3,7 +3,7 @@
     name: user-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/userdb
+    url: jdbc:postgresql://postgres-service:5432/userdb
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
