@@ -43,12 +43,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-v2-${{hashFiles('**/pom.xml')}}
+          key: ${{ runner.os }}-maven-v3-${{hashFiles('**/pom.xml')}}
           restore-keys: |
-            ${{runner.os}}-maven-v2-
+            ${{runner.os}}-maven-v3-
 
       - name: Compile code
         run: mvn clean compile
+
+      - name: Run Unit Tests (for Sonar)
+        run: mvn test
+
+      - name: Generate Code Coverage Report (for Sonar)
+        run: mvn jacoco:report
 
       - name: Run Checkstyle (Style Check)
         run: mvn checkstyle:check

@@ -43,7 +43,7 @@ echo "Waiting for PostgreSQL to be ready..."
 kubectl wait --for=condition=ready pod -l app=postgres -n staging --timeout=120s
 
 echo -e "\nDeploying application..."
-sed 's|IMAGE_PLACEHOLDER|user-service:latest|g' k8s/staging/deployment.yaml | kubectl apply -f -
+sed 's|user-service:latest|g' k8s/staging/deployment.yaml | kubectl apply -f -
 kubectl apply -f k8s/staging/configmap.yaml
 kubectl apply -f k8s/staging/secret.yaml
 kubectl apply -f k8s/staging/service.yaml
